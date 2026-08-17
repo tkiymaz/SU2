@@ -857,39 +857,100 @@ unsigned long CSpeciesFlameletSolver::GetEnthFromTemp(CFluidModel* fluid_model, 
                                                       const su2double* scalar_solution, su2double* val_enth) {
   SU2_ZONE_SCOPED
   /*--- convergence criterion for temperature in [K], high accuracy needed for restarts. ---*/
-  su2double delta_temp_final = 0.001;
+  const su2double delta_temp_final = 0.001;
   su2double enth_iter = scalar_solution[I_ENTH];
-  su2double delta_enth;
   su2double delta_temp_iter = 1e10;
   unsigned long exit_code = 0;
-  const int counter_limit = 1000;
-  /*--- Relaxation factor for Newton iterations. ---*/
-  const su2double RelaxAlpha = 0.75;
-
-  int counter = 0;
 
   su2double val_scalars[MAXNVAR];
   for (auto iVar = 0u; iVar < nVar; iVar++) val_scalars[iVar] = scalar_solution[iVar];
 
-  while ((abs(delta_temp_iter) > delta_temp_final) && (counter++ < counter_limit)) {
-    /*--- Add all quantities and their names to the look up vectors. ---*/
-    val_scalars[I_ENTH] = enth_iter;
+  auto TempOf = [&](const su2double val_enth_iter) {
+    val_scalars[I_ENTH] = val_enth_iter;
     fluid_model->SetTDState_T(val_temp, val_scalars);
+    return fluid_model->GetTemperature();
+  };
 
-    su2double Temperature = fluid_model->GetTemperature();
-    su2double Cp = fluid_model->GetCp();
+  /*--- Phase 1: relaxed Newton on dh = alpha*Cp*dT (fast path for well-behaved nodes).
+        Near the manifold's cold edge the tabulated dh/dT can be far smaller than Cp,
+        which makes this iteration overshoot and oscillate between two states straddling
+        the target temperature (it can never converge). While iterating we therefore
+        remember the tightest bracket [h_lo, h_hi] with T(h_lo) < val_temp < T(h_hi);
+        as soon as both sides have been seen, we switch to bisection, which is
+        guaranteed to converge whenever the target temperature exists in the table. ---*/
+  const su2double RelaxAlpha = 0.75;
+  const int newton_limit = 100;
+  bool have_lo = false, have_hi = false;
+  su2double h_lo = 0.0, h_hi = 0.0;
 
+  for (int counter = 0; counter < newton_limit; ++counter) {
+    const su2double Temperature = TempOf(enth_iter);
+    const su2double Cp = fluid_model->GetCp();
     delta_temp_iter = val_temp - Temperature;
+    if (abs(delta_temp_iter) <= delta_temp_final) {
+      *val_enth = enth_iter;
+      return 0;
+    }
+    if (delta_temp_iter > 0) {
+      if (!have_lo || enth_iter > h_lo) h_lo = enth_iter;
+      have_lo = true;
+    } else {
+      if (!have_hi || enth_iter < h_hi) h_hi = enth_iter;
+      have_hi = true;
+    }
+    if (have_lo && have_hi) break;
+    enth_iter += RelaxAlpha * Cp * delta_temp_iter;
+  }
 
-    delta_enth = RelaxAlpha * Cp * delta_temp_iter;
+  /*--- Phase 2: if the Newton exited without a bracket (slow monotone approach),
+        expand in the required direction with geometrically growing steps. If the
+        target temperature is genuinely outside the manifold (coverage gap), the
+        lookup clamps at the hull and T stops responding: no bracket is found and
+        the node is reported as not-iterated below, preserving the miss signal. ---*/
+  if (!(have_lo && have_hi)) {
+    su2double h_exp = enth_iter;
+    su2double T_exp = TempOf(h_exp);
+    su2double step = fmax(fabs(fluid_model->GetCp() * (val_temp - T_exp)), 100.0);
+    for (int k = 0; k < 60; ++k) {
+      if (val_temp > T_exp) {
+        h_lo = h_exp;
+        have_lo = true;
+      } else {
+        h_hi = h_exp;
+        have_hi = true;
+      }
+      if (have_lo && have_hi) break;
+      h_exp += (val_temp > T_exp) ? step : -step;
+      step *= 2.0;
+      T_exp = TempOf(h_exp);
+    }
+  }
 
-    enth_iter += delta_enth;
-
+  /*--- Phase 3: bisection on the bracket. Tabulated T is piecewise-linearly
+        interpolated, so a sign change is preserved and the interval shrinks to
+        tolerance in <= ~60 halvings; interpolation jaggedness cannot defeat it. ---*/
+  if (have_lo && have_hi) {
+    if (h_lo > h_hi) {
+      const su2double h_tmp = h_lo;
+      h_lo = h_hi;
+      h_hi = h_tmp;
+    }
+    su2double h_mid = 0.5 * (h_lo + h_hi);
+    for (int k = 0; k < 100; ++k) {
+      h_mid = 0.5 * (h_lo + h_hi);
+      delta_temp_iter = val_temp - TempOf(h_mid);
+      if (abs(delta_temp_iter) <= delta_temp_final) break;
+      if (delta_temp_iter > 0)
+        h_lo = h_mid;
+      else
+        h_hi = h_mid;
+    }
+    enth_iter = h_mid;
   }
 
   *val_enth = enth_iter;
 
-  if (counter >= counter_limit) {
+  if (abs(delta_temp_iter) > delta_temp_final) {
     exit_code = 1;
   }
 
