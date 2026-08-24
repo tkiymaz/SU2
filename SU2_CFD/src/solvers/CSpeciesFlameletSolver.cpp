@@ -423,6 +423,9 @@ void CSpeciesFlameletSolver::Source_Residual(CGeometry* geometry, CSolver** solv
       for (auto i_aux = 0u; i_aux < n_aux; i_aux++) {
         Jacobian.AddVal2Diag(i_point, n_CV + i_aux, -fn->GetAuxSourceCons(i_point, i_aux) * volume);
       }
+      /*--- Progress variable: tabulated d(S_PV)/d(PV), stored clipped to its non-positive part,
+       *    so the contribution -d(S_PV)/d(PV) * V only ever strengthens the diagonal. ---*/
+      Jacobian.AddVal2Diag(i_point, I_PROGVAR, -fn->GetSourcePVJacobian(i_point) * volume);
     }
   }
   END_SU2_OMP_FOR
@@ -617,10 +620,20 @@ unsigned long CSpeciesFlameletSolver::SetScalarSources(const CConfig* config, CF
   SU2_ZONE_SCOPED
   /*--- Compute total source terms from the production and consumption. ---*/
 
-  vector<su2double> table_sources(flamelet_config_options.n_control_vars + 2 * flamelet_config_options.n_user_scalars);
+  vector<su2double> table_sources(flamelet_config_options.n_control_vars + 2 * flamelet_config_options.n_user_scalars +
+                                  1);
   unsigned long misses = fluid_model_local->EvaluateDataSet(scalars, FLAMELET_LOOKUP_OPS::SOURCES, table_sources);
-  table_sources[I_PROGVAR] = fmax(0, table_sources[I_PROGVAR]);
+  const su2double source_pv_raw = table_sources[I_PROGVAR];
+  table_sources[I_PROGVAR] = fmax(0, source_pv_raw);
   nodes->SetTableMisses(iPoint, misses);
+
+  /*--- Tabulated PV source Jacobian d(S_PV)/d(PV) (last source entry, 0 when not in the manifold).
+        Patankar-type treatment: keep only the non-positive (stabilizing) part, and zero it where
+        the PV source itself is clipped to zero (the applied source is constant there). ---*/
+  su2double dsource_pv_dpv =
+      table_sources[flamelet_config_options.n_control_vars + 2 * flamelet_config_options.n_user_scalars];
+  if (source_pv_raw <= 0) dsource_pv_dpv = 0.0;
+  static_cast<CSpeciesFlameletVariable*>(nodes)->SetSourcePVJacobian(iPoint, fmin(dsource_pv_dpv, 0.0));
 
   /*--- The source term for progress variable is always positive, we clip from below to make sure. --- */
 

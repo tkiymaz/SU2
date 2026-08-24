@@ -39,6 +39,7 @@ class CSpeciesFlameletVariable final : public CSpeciesVariable {
   MatrixType lookup_scalar; /*!< \brief Vector of the source terms from the lookup table for each scalar equation */
   su2vector<unsigned short> table_misses; /*!< \brief Vector of lookup table misses. */
   MatrixType source_cons_jac; /*!< \brief Consumption-rate Jacobian dS_aux_i/dY_aux_i = source_cons_i, one column per user scalar. */
+  su2vector<su2double> source_pv_jac; /*!< \brief Non-positive part of the tabulated PV source Jacobian d(S_PV)/d(PV) for implicit treatment. */
 
  public:
   /*!
@@ -102,4 +103,14 @@ class CSpeciesFlameletVariable final : public CSpeciesVariable {
   inline su2double GetAuxSourceCons(unsigned long iPoint, unsigned long i_aux) const {
     return source_cons_jac(iPoint, i_aux);
   }
+
+  /*!
+   * \brief Store the (clipped, non-positive) PV source Jacobian d(S_PV)/d(PV) at iPoint.
+   */
+  inline void SetSourcePVJacobian(unsigned long iPoint, su2double val) { source_pv_jac(iPoint) = val; }
+
+  /*!
+   * \brief Get the (clipped, non-positive) PV source Jacobian d(S_PV)/d(PV) at iPoint.
+   */
+  inline su2double GetSourcePVJacobian(unsigned long iPoint) const { return source_pv_jac(iPoint); }
 };

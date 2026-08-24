@@ -183,8 +183,9 @@ void CFluidFlamelet::PreprocessLookUp(CConfig* config) {
     default:
       break;
   }
-  /*--- Scalar source term variables and names. ---*/
-  size_t n_sources = n_control_vars + 2 * n_user_scalars;
+  /*--- Scalar source term variables and names. The last entry is the optional derivative
+        of the progress variable source w.r.t. the progress variable ("NULL" = zero). ---*/
+  size_t n_sources = n_control_vars + 2 * n_user_scalars + 1;
   varnames_Sources.resize(n_sources);
   val_vars_Sources.resize(n_sources);
   for (auto iCV = 0u; iCV < n_control_vars; iCV++) varnames_Sources[iCV] = flamelet_options.cv_source_names[iCV];
@@ -198,6 +199,7 @@ void CFluidFlamelet::PreprocessLookUp(CConfig* config) {
     varnames_Sources[n_control_vars + 2 * i_aux] = flamelet_options.user_source_names[2 * i_aux];
     varnames_Sources[n_control_vars + 2 * i_aux + 1] = flamelet_options.user_source_names[2 * i_aux + 1];
   }
+  varnames_Sources[n_control_vars + 2 * n_user_scalars] = flamelet_options.pv_source_jacobian_name;
 
   /*--- Passive look-up terms ---*/
   size_t n_lookups = flamelet_options.n_lookups;

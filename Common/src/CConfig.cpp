@@ -2327,6 +2327,9 @@ void CConfig::SetConfig_Options() {
   /* !\brief CONTROLLING_VARIABLE_SOURCE_NAMES \n DESCRIPTION: Names of the variables in the flamelet manifold corresponding to the source terms of the controlling variables. */
   addStringListOption("CONTROLLING_VARIABLE_SOURCE_NAMES", flamelet_ParsedOptions.n_control_vars, flamelet_ParsedOptions.cv_source_names);
 
+  /* !\brief PROGRESS_VARIABLE_SOURCE_JACOBIAN_NAME \n DESCRIPTION: Name of the flamelet manifold variable holding the derivative of the progress variable source term w.r.t. the progress variable, used for implicit treatment of the PV source (only its negative part is used). \n DEFAULT: NULL (off) */
+  addStringOption("PROGRESS_VARIABLE_SOURCE_JACOBIAN_NAME", flamelet_ParsedOptions.pv_source_jacobian_name, string("NULL"));
+
   /* DESCRIPTION: Names of the passive lookup variables for flamelet LUT */
   addStringListOption("LOOKUP_NAMES", flamelet_ParsedOptions.n_lookups, flamelet_ParsedOptions.lookup_names);
 

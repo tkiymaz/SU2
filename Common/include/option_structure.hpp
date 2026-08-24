@@ -1480,6 +1480,7 @@ struct FluidFlamelet_ParsedOptions {
 
   std::string *controlling_variable_names; /*!< \brief Names of the independent, transported scalars. */
   std::string* cv_source_names;            /*!< \brief Names of the source terms of the independent, transported scalars. */
+  std::string pv_source_jacobian_name = "NULL"; /*!< \brief Name of the manifold variable holding d(S_PV)/d(PV), for implicit treatment of the progress variable source ("NULL" = off). */
   std::string* lookup_names;               /*!< \brief Names of the passive look-up terms. */
   std::string* user_scalar_names;          /*!< \brief Names of the passive transported scalars. */
   std::string* user_source_names;          /*!< \brief Names of the source terms of the passive transported scalars. */
